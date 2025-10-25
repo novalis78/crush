@@ -57,3 +57,10 @@ func TokensUsed(props ...any) {
 		props...,
 	)
 }
+
+func ContextThresholdReached(props ...any) {
+	send(
+		"context threshold reached",
+		props...,
+	)
+}

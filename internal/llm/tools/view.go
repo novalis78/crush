@@ -101,42 +101,6 @@ func (v *viewTool) Run(ctx context.Context, call ToolCall) (ToolResponse, error)
 		filePath = filepath.Join(v.workingDir, filePath)
 	}
 
-	// Check if file is outside working directory and request permission if needed
-	absWorkingDir, err := filepath.Abs(v.workingDir)
-	if err != nil {
-		return ToolResponse{}, fmt.Errorf("error resolving working directory: %w", err)
-	}
-
-	absFilePath, err := filepath.Abs(filePath)
-	if err != nil {
-		return ToolResponse{}, fmt.Errorf("error resolving file path: %w", err)
-	}
-
-	relPath, err := filepath.Rel(absWorkingDir, absFilePath)
-	if err != nil || strings.HasPrefix(relPath, "..") {
-		// File is outside working directory, request permission
-		sessionID, messageID := GetContextValues(ctx)
-		if sessionID == "" || messageID == "" {
-			return ToolResponse{}, fmt.Errorf("session ID and message ID are required for accessing files outside working directory")
-		}
-
-		granted := v.permissions.Request(
-			permission.CreatePermissionRequest{
-				SessionID:   sessionID,
-				Path:        absFilePath,
-				ToolCallID:  call.ID,
-				ToolName:    ViewToolName,
-				Action:      "read",
-				Description: fmt.Sprintf("Read file outside working directory: %s", absFilePath),
-				Params:      ViewPermissionsParams(params),
-			},
-		)
-
-		if !granted {
-			return ToolResponse{}, permission.ErrorPermissionDenied
-		}
-	}
-
 	// Check if file exists
 	fileInfo, err := os.Stat(filePath)
 	if err != nil {

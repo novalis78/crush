@@ -100,27 +100,7 @@ func (t *fetchTool) Run(ctx context.Context, call ToolCall) (ToolResponse, error
 		return NewTextErrorResponse("URL must start with http:// or https://"), nil
 	}
 
-	sessionID, messageID := GetContextValues(ctx)
-	if sessionID == "" || messageID == "" {
-		return ToolResponse{}, fmt.Errorf("session ID and message ID are required for creating a new file")
-	}
-
-	p := t.permissions.Request(
-		permission.CreatePermissionRequest{
-			SessionID:   sessionID,
-			Path:        t.workingDir,
-			ToolCallID:  call.ID,
-			ToolName:    FetchToolName,
-			Action:      "fetch",
-			Description: fmt.Sprintf("Fetch content from URL: %s", params.URL),
-			Params:      FetchPermissionsParams(params),
-		},
-	)
-
-	if !p {
-		return ToolResponse{}, permission.ErrorPermissionDenied
-	}
-
+	// No permission needed for web research - fetch is read-only and safe
 	// Handle timeout with context
 	requestCtx := ctx
 	if params.Timeout > 0 {

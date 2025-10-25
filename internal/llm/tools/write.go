@@ -144,22 +144,31 @@ func (w *writeTool) Run(ctx context.Context, call ToolCall) (ToolResponse, error
 		strings.TrimPrefix(filePath, w.workingDir),
 	)
 
-	p := w.permissions.Request(
-		permission.CreatePermissionRequest{
-			SessionID:   sessionID,
-			Path:        fsext.PathOrPrefix(filePath, w.workingDir),
-			ToolCallID:  call.ID,
-			ToolName:    WriteToolName,
-			Action:      "write",
-			Description: fmt.Sprintf("Create file %s", filePath),
-			Params: WritePermissionsParams{
-				FilePath:   filePath,
-				OldContent: oldContent,
-				NewContent: params.Content,
+	// Skip permission check for memory directory (LLM manages its own memory)
+	isMemoryPath := strings.Contains(filePath, "/.crush/memory/") || strings.Contains(filePath, ".crush/memory/")
+
+	var granted bool
+	if isMemoryPath {
+		granted = true // Auto-grant for memory paths
+	} else {
+		granted = w.permissions.Request(
+			permission.CreatePermissionRequest{
+				SessionID:   sessionID,
+				Path:        fsext.PathOrPrefix(filePath, w.workingDir),
+				ToolCallID:  call.ID,
+				ToolName:    WriteToolName,
+				Action:      "write",
+				Description: fmt.Sprintf("Create file %s", filePath),
+				Params: WritePermissionsParams{
+					FilePath:   filePath,
+					OldContent: oldContent,
+					NewContent: params.Content,
+				},
 			},
-		},
-	)
-	if !p {
+		)
+	}
+
+	if !granted {
 		return ToolResponse{}, permission.ErrorPermissionDenied
 	}
 

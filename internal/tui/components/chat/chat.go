@@ -236,7 +236,11 @@ func (m *messageListCmp) View() string {
 			),
 	}
 	if m.app.CoderAgent != nil && m.promptQueue > 0 {
-		queuePill := queuePill(m.promptQueue, t)
+		var queuedPrompts []string
+		if m.app.CoderAgent != nil {
+			queuedPrompts = m.app.CoderAgent.GetQueuedPrompts(m.session.ID)
+		}
+		queuePill := queuePill(m.promptQueue, queuedPrompts, t)
 		view = append(view, t.S().Base.PaddingLeft(4).PaddingTop(1).Render(queuePill))
 	}
 	return strings.Join(view, "\n")

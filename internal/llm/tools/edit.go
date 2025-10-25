@@ -287,22 +287,30 @@ func (e *editTool) deleteContent(ctx context.Context, filePath, oldString string
 		strings.TrimPrefix(filePath, e.workingDir),
 	)
 
-	p := e.permissions.Request(
-		permission.CreatePermissionRequest{
-			SessionID:   sessionID,
-			Path:        fsext.PathOrPrefix(filePath, e.workingDir),
-			ToolCallID:  call.ID,
-			ToolName:    EditToolName,
-			Action:      "write",
-			Description: fmt.Sprintf("Delete content from file %s", filePath),
-			Params: EditPermissionsParams{
-				FilePath:   filePath,
-				OldContent: oldContent,
-				NewContent: newContent,
+	// Skip permission check for memory directory (LLM manages its own memory)
+	isMemoryPath := strings.Contains(filePath, "/.crush/memory/") || strings.Contains(filePath, ".crush/memory/")
+
+	var granted bool
+	if isMemoryPath {
+		granted = true
+	} else {
+		granted = e.permissions.Request(
+			permission.CreatePermissionRequest{
+				SessionID:   sessionID,
+				Path:        fsext.PathOrPrefix(filePath, e.workingDir),
+				ToolCallID:  call.ID,
+				ToolName:    EditToolName,
+				Action:      "write",
+				Description: fmt.Sprintf("Delete content from file %s", filePath),
+				Params: EditPermissionsParams{
+					FilePath:   filePath,
+					OldContent: oldContent,
+					NewContent: newContent,
+				},
 			},
-		},
-	)
-	if !p {
+		)
+	}
+	if !granted {
 		return ToolResponse{}, permission.ErrorPermissionDenied
 	}
 
@@ -422,22 +430,30 @@ func (e *editTool) replaceContent(ctx context.Context, filePath, oldString, newS
 		strings.TrimPrefix(filePath, e.workingDir),
 	)
 
-	p := e.permissions.Request(
-		permission.CreatePermissionRequest{
-			SessionID:   sessionID,
-			Path:        fsext.PathOrPrefix(filePath, e.workingDir),
-			ToolCallID:  call.ID,
-			ToolName:    EditToolName,
-			Action:      "write",
-			Description: fmt.Sprintf("Replace content in file %s", filePath),
-			Params: EditPermissionsParams{
-				FilePath:   filePath,
-				OldContent: oldContent,
-				NewContent: newContent,
+	// Skip permission check for memory directory (LLM manages its own memory)
+	isMemoryPath := strings.Contains(filePath, "/.crush/memory/") || strings.Contains(filePath, ".crush/memory/")
+
+	var granted bool
+	if isMemoryPath {
+		granted = true
+	} else {
+		granted = e.permissions.Request(
+			permission.CreatePermissionRequest{
+				SessionID:   sessionID,
+				Path:        fsext.PathOrPrefix(filePath, e.workingDir),
+				ToolCallID:  call.ID,
+				ToolName:    EditToolName,
+				Action:      "write",
+				Description: fmt.Sprintf("Replace content in file %s", filePath),
+				Params: EditPermissionsParams{
+					FilePath:   filePath,
+					OldContent: oldContent,
+					NewContent: newContent,
+				},
 			},
-		},
-	)
-	if !p {
+		)
+	}
+	if !granted {
 		return ToolResponse{}, permission.ErrorPermissionDenied
 	}
 

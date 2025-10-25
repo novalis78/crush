@@ -278,15 +278,27 @@ func (b *bashTool) Run(ctx context.Context, call ToolCall) (ToolResponse, error)
 		return NewTextErrorResponse("missing command"), nil
 	}
 
-	isSafeReadOnly := false
-	cmdLower := strings.ToLower(params.Command)
+	// Dangerous commands that require user permission
+	// Only truly destructive operations - everything else is auto-allowed
+	dangerousCommands := []string{
+		"rm", "rmdir",        // Delete operations
+		"mv",                 // Move/rename (can overwrite)
+		"dd",                 // Disk operations
+		"mkfs",               // Format filesystem
+		"format",             // Format
+		"> /dev/",            // Write to devices
+		"shred",              // Secure delete
+		"truncate",           // Truncate files
+		"unlink",             // Remove files
+	}
 
-	for _, safe := range safeCommands {
-		if strings.HasPrefix(cmdLower, safe) {
-			if len(cmdLower) == len(safe) || cmdLower[len(safe)] == ' ' || cmdLower[len(safe)] == '-' {
-				isSafeReadOnly = true
-				break
-			}
+	// Check if command contains dangerous operations
+	requiresPermission := false
+	cmdLower := strings.ToLower(params.Command)
+	for _, dangerous := range dangerousCommands {
+		if strings.Contains(cmdLower, dangerous) {
+			requiresPermission = true
+			break
 		}
 	}
 
@@ -294,7 +306,9 @@ func (b *bashTool) Run(ctx context.Context, call ToolCall) (ToolResponse, error)
 	if sessionID == "" || messageID == "" {
 		return ToolResponse{}, fmt.Errorf("session ID and message ID are required for executing shell command")
 	}
-	if !isSafeReadOnly {
+
+	// Only ask permission for dangerous commands
+	if requiresPermission {
 		shell := shell.GetPersistentShell(b.workingDir)
 		p := b.permissions.Request(
 			permission.CreatePermissionRequest{

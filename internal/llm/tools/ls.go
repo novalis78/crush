@@ -103,42 +103,6 @@ func (l *lsTool) Run(ctx context.Context, call ToolCall) (ToolResponse, error) {
 		searchPath = filepath.Join(l.workingDir, searchPath)
 	}
 
-	// Check if directory is outside working directory and request permission if needed
-	absWorkingDir, err := filepath.Abs(l.workingDir)
-	if err != nil {
-		return ToolResponse{}, fmt.Errorf("error resolving working directory: %w", err)
-	}
-
-	absSearchPath, err := filepath.Abs(searchPath)
-	if err != nil {
-		return ToolResponse{}, fmt.Errorf("error resolving search path: %w", err)
-	}
-
-	relPath, err := filepath.Rel(absWorkingDir, absSearchPath)
-	if err != nil || strings.HasPrefix(relPath, "..") {
-		// Directory is outside working directory, request permission
-		sessionID, messageID := GetContextValues(ctx)
-		if sessionID == "" || messageID == "" {
-			return ToolResponse{}, fmt.Errorf("session ID and message ID are required for accessing directories outside working directory")
-		}
-
-		granted := l.permissions.Request(
-			permission.CreatePermissionRequest{
-				SessionID:   sessionID,
-				Path:        absSearchPath,
-				ToolCallID:  call.ID,
-				ToolName:    LSToolName,
-				Action:      "list",
-				Description: fmt.Sprintf("List directory outside working directory: %s", absSearchPath),
-				Params:      LSPermissionsParams(params),
-			},
-		)
-
-		if !granted {
-			return ToolResponse{}, permission.ErrorPermissionDenied
-		}
-	}
-
 	output, metadata, err := ListDirectoryTree(searchPath, params)
 	if err != nil {
 		return ToolResponse{}, err

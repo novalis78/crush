@@ -38,6 +38,19 @@ func (a *agent) eventTokensUsed(sessionID string, usage provider.TokenUsage, cos
 	)
 }
 
+func (a *agent) eventContextThreshold(sessionID string, level string, percentage float64, totalTokens, contextWindow int64, threshold float64) {
+	event.ContextThresholdReached(
+		append(
+			a.eventCommon(sessionID),
+			"level", level,
+			"percentage", percentage,
+			"total tokens", totalTokens,
+			"context window", contextWindow,
+			"threshold", threshold,
+		)...,
+	)
+}
+
 func (a *agent) eventCommon(sessionID string) []any {
 	cfg := config.Get()
 	currentModel := cfg.Models[cfg.Agents["coder"].Model]

@@ -507,6 +507,9 @@ func (m *sidebarCmp) mcpBlock() string {
 
 func formatTokensAndCost(tokens, contextWindow int64, cost float64) string {
 	t := styles.CurrentTheme()
+	cfg := config.Get()
+	thresholds := cfg.Options.GetContextThresholds()
+
 	// Format tokens in human-readable format (e.g., 110K, 1.2M)
 	var formattedTokens string
 	switch {
@@ -533,12 +536,29 @@ func formatTokensAndCost(tokens, contextWindow int64, cost float64) string {
 	formattedCost := baseStyle.Foreground(t.FgMuted).Render(fmt.Sprintf("$%.2f", cost))
 
 	formattedTokens = baseStyle.Foreground(t.FgSubtle).Render(fmt.Sprintf("(%s)", formattedTokens))
-	formattedPercentage := baseStyle.Foreground(t.FgMuted).Render(fmt.Sprintf("%d%%", int(percentage)))
-	formattedTokens = fmt.Sprintf("%s %s", formattedPercentage, formattedTokens)
-	if percentage > 80 {
-		// add the warning icon
-		formattedTokens = fmt.Sprintf("%s %s", styles.WarningIcon, formattedTokens)
+
+	// Color code the percentage based on thresholds
+	var formattedPercentage string
+	var warningIcon string
+	switch {
+	case percentage >= thresholds.CriticalAt:
+		// Red - critical
+		formattedPercentage = baseStyle.Foreground(lipgloss.Color("#FF0000")).Render(fmt.Sprintf("%d%%", int(percentage)))
+		warningIcon = "⚠️  "
+	case percentage >= thresholds.AutoCompactAt:
+		// Orange - auto-compact threshold
+		formattedPercentage = baseStyle.Foreground(lipgloss.Color("#FF6B00")).Render(fmt.Sprintf("%d%%", int(percentage)))
+		warningIcon = "⚠️  "
+	case percentage >= thresholds.WarnAt:
+		// Yellow - warning
+		formattedPercentage = baseStyle.Foreground(lipgloss.Color("#FFD700")).Render(fmt.Sprintf("%d%%", int(percentage)))
+		warningIcon = "⚡ "
+	default:
+		formattedPercentage = baseStyle.Foreground(t.FgMuted).Render(fmt.Sprintf("%d%%", int(percentage)))
+		warningIcon = ""
 	}
+
+	formattedTokens = fmt.Sprintf("%s%s %s", warningIcon, formattedPercentage, formattedTokens)
 
 	return fmt.Sprintf("%s %s", formattedTokens, formattedCost)
 }

@@ -8,21 +8,29 @@ import (
 	"github.com/charmbracelet/lipgloss/v2"
 )
 
-func queuePill(queue int, t *styles.Theme) string {
+func queuePill(queue int, queuedPrompts []string, t *styles.Theme) string {
 	if queue <= 0 {
 		return ""
 	}
-	triangles := styles.ForegroundGrad("▶▶▶▶▶▶▶▶▶", false, t.RedDark, t.Accent)
-	if queue < 10 {
-		triangles = triangles[:queue]
-	}
 
-	allTriangles := strings.Join(triangles, "")
+	// Build the content with just the queued prompts
+	var content strings.Builder
+	for i, prompt := range queuedPrompts {
+		// Truncate long prompts
+		displayPrompt := prompt
+		if len(displayPrompt) > 60 {
+			displayPrompt = displayPrompt[:57] + "..."
+		}
+		content.WriteString(fmt.Sprintf("%d. %s", i+1, displayPrompt))
+		if i < len(queuedPrompts)-1 {
+			content.WriteString("\n")
+		}
+	}
 
 	return t.S().Base.
 		BorderStyle(lipgloss.RoundedBorder()).
 		BorderForeground(t.BgOverlay).
 		PaddingLeft(1).
 		PaddingRight(1).
-		Render(fmt.Sprintf("%s %d Queued", allTriangles, queue))
+		Render(content.String())
 }

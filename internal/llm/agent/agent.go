@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -56,8 +57,10 @@ type Service interface {
 	IsSessionBusy(sessionID string) bool
 	IsBusy() bool
 	Summarize(ctx context.Context, sessionID string) error
+	CompactSession(ctx context.Context, sessionID string) error
 	UpdateModel() error
 	QueuedPrompts(sessionID string) int
+	GetQueuedPrompts(sessionID string) []string
 	ClearQueue(sessionID string)
 }
 
@@ -183,6 +186,12 @@ func NewAgent(
 
 		// Base tools available to all agents
 		cwd := cfg.WorkingDir()
+		// Memory storage path: ~/.local/share/crush or custom data dir
+		memoryBasePath := filepath.Join(cfg.Options.DataDirectory, "memory")
+		if !filepath.IsAbs(memoryBasePath) {
+			memoryBasePath = filepath.Join(cwd, memoryBasePath)
+		}
+
 		result := make(map[string]tools.BaseTool)
 		for _, tool := range []tools.BaseTool{
 			tools.NewBashTool(permissions, cwd, cfg.Options.Attribution),
@@ -193,6 +202,7 @@ func NewAgent(
 			tools.NewGlobTool(cwd),
 			tools.NewGrepTool(cwd),
 			tools.NewLsTool(permissions, cwd),
+			tools.NewMemoryTool(memoryBasePath, cwd),
 			tools.NewSourcegraphTool(),
 			tools.NewViewTool(lspClients, permissions, cwd),
 			tools.NewWriteTool(lspClients, permissions, history, cwd),
@@ -281,6 +291,17 @@ func (a *agent) QueuedPrompts(sessionID string) int {
 		return 0
 	}
 	return len(l)
+}
+
+func (a *agent) GetQueuedPrompts(sessionID string) []string {
+	l, ok := a.promptQueue.Get(sessionID)
+	if !ok {
+		return nil
+	}
+	// Return a copy to avoid concurrent modification
+	result := make([]string, len(l))
+	copy(result, l)
+	return result
 }
 
 func (a *agent) generateTitle(ctx context.Context, sessionID string, content string) error {
@@ -770,15 +791,60 @@ func (a *agent) trackUsage(ctx context.Context, sessionID string, model catwalk.
 
 	a.eventTokensUsed(sessionID, usage, cost)
 
+	// Calculate previous percentage
+	previousTokens := sess.PromptTokens + sess.CompletionTokens
+
 	sess.Cost += cost
 	sess.CompletionTokens = usage.OutputTokens + usage.CacheReadTokens
 	sess.PromptTokens = usage.InputTokens + usage.CacheCreationTokens
+
+	totalTokens := sess.PromptTokens + sess.CompletionTokens
+	contextWindow := model.ContextWindow
+	previousPercentage := (float64(previousTokens) / float64(contextWindow)) * 100
+	currentPercentage := (float64(totalTokens) / float64(contextWindow)) * 100
+
+	// Check for threshold crossings
+	cfg := config.Get()
+	thresholds := cfg.Options.GetContextThresholds()
+
+	a.checkThresholdCrossing(sessionID, previousPercentage, currentPercentage, thresholds.WarnAt, "warn", totalTokens, contextWindow)
+	a.checkThresholdCrossing(sessionID, previousPercentage, currentPercentage, thresholds.AutoCompactAt, "auto_compact", totalTokens, contextWindow)
+	a.checkThresholdCrossing(sessionID, previousPercentage, currentPercentage, thresholds.CriticalAt, "critical", totalTokens, contextWindow)
 
 	_, err = a.sessions.Save(ctx, sess)
 	if err != nil {
 		return fmt.Errorf("failed to save session: %w", err)
 	}
 	return nil
+}
+
+func (a *agent) checkThresholdCrossing(sessionID string, previousPercentage, currentPercentage, threshold float64, level string, totalTokens, contextWindow int64) {
+	if previousPercentage < threshold && currentPercentage >= threshold {
+		a.eventContextThreshold(sessionID, level, currentPercentage, totalTokens, contextWindow, threshold)
+
+		// Auto-trigger compaction at 85% threshold
+		if level == "auto_compact" {
+			cfg := config.Get()
+			if !cfg.Options.DisableAutoSummarize {
+				slog.Info("Auto-compaction triggered", "session_id", sessionID, "percentage", currentPercentage)
+				// Trigger compaction in background
+				go func() {
+					ctx := context.Background()
+					if err := a.CompactSession(ctx, sessionID); err != nil {
+						slog.Error("Auto-compaction failed", "session_id", sessionID, "error", err)
+						// Publish error event
+						event := AgentEvent{
+							Type:  AgentEventTypeError,
+							Error: fmt.Errorf("auto-compaction failed: %w", err),
+						}
+						a.Publish(pubsub.CreatedEvent, event)
+					}
+				}()
+			} else {
+				slog.Info("Auto-compaction skipped (disabled in config)", "session_id", sessionID)
+			}
+		}
+	}
 }
 
 func (a *agent) Summarize(ctx context.Context, sessionID string) error {

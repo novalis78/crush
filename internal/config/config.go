@@ -156,17 +156,46 @@ type Attribution struct {
 	GeneratedWith bool `json:"generated_with,omitempty" jsonschema:"description=Add Generated with Crush line to commit messages and issues and PRs,default=true"`
 }
 
+type ContextThresholds struct {
+	WarnAt        float64 `json:"warn_at,omitempty" jsonschema:"description=Percentage threshold to show warning (0-100),default=70,example=70"`
+	AutoCompactAt float64 `json:"auto_compact_at,omitempty" jsonschema:"description=Percentage threshold to auto-compact conversation (0-100),default=85,example=85"`
+	CriticalAt    float64 `json:"critical_at,omitempty" jsonschema:"description=Percentage threshold for critical warning (0-100),default=90,example=90"`
+}
+
 type Options struct {
-	ContextPaths              []string     `json:"context_paths,omitempty" jsonschema:"description=Paths to files containing context information for the AI,example=.cursorrules,example=CRUSH.md"`
-	TUI                       *TUIOptions  `json:"tui,omitempty" jsonschema:"description=Terminal user interface options"`
-	Debug                     bool         `json:"debug,omitempty" jsonschema:"description=Enable debug logging,default=false"`
-	DebugLSP                  bool         `json:"debug_lsp,omitempty" jsonschema:"description=Enable debug logging for LSP servers,default=false"`
-	DisableAutoSummarize      bool         `json:"disable_auto_summarize,omitempty" jsonschema:"description=Disable automatic conversation summarization,default=false"`
-	DataDirectory             string       `json:"data_directory,omitempty" jsonschema:"description=Directory for storing application data (relative to working directory),default=.crush,example=.crush"` // Relative to the cwd
-	DisabledTools             []string     `json:"disabled_tools" jsonschema:"description=Tools to disable"`
-	DisableProviderAutoUpdate bool         `json:"disable_provider_auto_update,omitempty" jsonschema:"description=Disable providers auto-update,default=false"`
-	Attribution               *Attribution `json:"attribution,omitempty" jsonschema:"description=Attribution settings for generated content"`
-	DisableMetrics            bool         `json:"disable_metrics,omitempty" jsonschema:"description=Disable sending metrics,default=false"`
+	ContextPaths              []string           `json:"context_paths,omitempty" jsonschema:"description=Paths to files containing context information for the AI,example=.cursorrules,example=CRUSH.md"`
+	ContextThresholds         *ContextThresholds `json:"context_thresholds,omitempty" jsonschema:"description=Context window usage thresholds"`
+	TUI                       *TUIOptions        `json:"tui,omitempty" jsonschema:"description=Terminal user interface options"`
+	Debug                     bool               `json:"debug,omitempty" jsonschema:"description=Enable debug logging,default=false"`
+	DebugLSP                  bool               `json:"debug_lsp,omitempty" jsonschema:"description=Enable debug logging for LSP servers,default=false"`
+	DisableAutoSummarize      bool               `json:"disable_auto_summarize,omitempty" jsonschema:"description=Disable automatic conversation summarization,default=false"`
+	DataDirectory             string             `json:"data_directory,omitempty" jsonschema:"description=Directory for storing application data (relative to working directory),default=.crush,example=.crush"` // Relative to the cwd
+	DisabledTools             []string           `json:"disabled_tools" jsonschema:"description=Tools to disable"`
+	DisableProviderAutoUpdate bool               `json:"disable_provider_auto_update,omitempty" jsonschema:"description=Disable providers auto-update,default=false"`
+	Attribution               *Attribution       `json:"attribution,omitempty" jsonschema:"description=Attribution settings for generated content"`
+	DisableMetrics            bool               `json:"disable_metrics,omitempty" jsonschema:"description=Disable sending metrics,default=false"`
+}
+
+// GetContextThresholds returns the context thresholds with defaults
+func (o *Options) GetContextThresholds() ContextThresholds {
+	if o == nil || o.ContextThresholds == nil {
+		return ContextThresholds{
+			WarnAt:        70.0,
+			AutoCompactAt: 85.0,
+			CriticalAt:    90.0,
+		}
+	}
+	thresholds := *o.ContextThresholds
+	if thresholds.WarnAt == 0 {
+		thresholds.WarnAt = 70.0
+	}
+	if thresholds.AutoCompactAt == 0 {
+		thresholds.AutoCompactAt = 85.0
+	}
+	if thresholds.CriticalAt == 0 {
+		thresholds.CriticalAt = 90.0
+	}
+	return thresholds
 }
 
 type MCPs map[string]MCPConfig
@@ -465,6 +494,7 @@ func allToolNames() []string {
 		"glob",
 		"grep",
 		"ls",
+		"memory",
 		"sourcegraph",
 		"view",
 		"write",
