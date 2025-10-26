@@ -199,6 +199,7 @@ func NewAgent(
 			tools.NewEditTool(lspClients, permissions, history, cwd),
 			tools.NewMultiEditTool(lspClients, permissions, history, cwd),
 			tools.NewFetchTool(permissions, cwd),
+			tools.NewWebSearchTool(permissions, cwd),
 			tools.NewGlobTool(cwd),
 			tools.NewGrepTool(cwd),
 			tools.NewLsTool(permissions, cwd),

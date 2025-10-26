@@ -497,6 +497,7 @@ func allToolNames() []string {
 		"memory",
 		"sourcegraph",
 		"view",
+		"websearch",
 		"write",
 	}
 }
