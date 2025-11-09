@@ -304,6 +304,14 @@ func NewBashTool(permissions permission.Service, workingDir string, attribution 
 			var done bool
 			var execErr error
 
+			// Track output for hang detection on git/SSH commands
+			var prevOutputLen int
+			var noOutputDuration time.Duration
+			lastOutputCheck := time.Now()
+			isGitCommand := strings.Contains(params.Command, "git push") ||
+				strings.Contains(params.Command, "git pull") ||
+				strings.Contains(params.Command, "git fetch")
+
 		waitLoop:
 			for {
 				select {
@@ -311,6 +319,26 @@ func NewBashTool(permissions permission.Service, workingDir string, attribution 
 					stdout, stderr, done, execErr = bgShell.GetOutput()
 					if done {
 						break waitLoop
+					}
+
+					// Detect SSH/git hangs: no new output for 10 seconds on git operations.
+					if isGitCommand {
+						currentOutputLen := len(stdout) + len(stderr)
+						timeSinceLastCheck := time.Since(lastOutputCheck)
+
+						if currentOutputLen == prevOutputLen {
+							noOutputDuration += timeSinceLastCheck
+							if noOutputDuration > 10*time.Second {
+								// Likely hanging on SSH auth.
+								bgManager.Kill(bgShell.ID)
+								return fantasy.ToolResponse{}, fmt.Errorf("git command appears to be hanging (likely SSH authentication issue). Please run manually in your terminal with SSH agent configured")
+							}
+						} else {
+							noOutputDuration = 0
+						}
+
+						prevOutputLen = currentOutputLen
+						lastOutputCheck = time.Now()
 					}
 				case <-timeout:
 					stdout, stderr, done, execErr = bgShell.GetOutput()

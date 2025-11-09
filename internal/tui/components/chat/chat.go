@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"time"
 
@@ -518,9 +519,21 @@ func (m *messageListCmp) updateToolCalls(msg message.Message, existingToolCalls 
 	return tea.Batch(cmds...)
 }
 
+// extractShellID extracts the shell ID from a job_output tool call's input JSON.
+func extractShellID(tc message.ToolCall) string {
+	if tc.Name != tools.JobOutputToolName {
+		return ""
+	}
+	var params tools.JobOutputParams
+	if err := json.Unmarshal([]byte(tc.Input), &params); err != nil {
+		return ""
+	}
+	return params.ShellID
+}
+
 // updateOrAddToolCall updates an existing tool call or adds a new one.
 func (m *messageListCmp) updateOrAddToolCall(msg message.Message, tc message.ToolCall, existingToolCalls map[int]messages.ToolCallCmp) tea.Cmd {
-	// Try to find existing tool call
+	// Try to find existing tool call by ID.
 	for _, existingTC := range existingToolCalls {
 		if tc.ID == existingTC.GetToolCall().ID {
 			existingTC.SetToolCall(tc)
@@ -532,7 +545,29 @@ func (m *messageListCmp) updateOrAddToolCall(msg message.Message, tc message.Too
 		}
 	}
 
-	// Add new tool call if not found
+	// For job_output calls, check if we should replace a previous job_output for the same shell ID.
+	if tc.Name == tools.JobOutputToolName {
+		newShellID := extractShellID(tc)
+		if newShellID != "" {
+			for _, existingTC := range existingToolCalls {
+				existingCall := existingTC.GetToolCall()
+				if existingCall.Name == tools.JobOutputToolName {
+					existingShellID := extractShellID(existingCall)
+					if existingShellID == newShellID {
+						// Replace the previous job_output for this shell ID.
+						existingTC.SetToolCall(tc)
+						if msg.FinishPart() != nil && msg.FinishPart().Reason == message.FinishReasonCanceled {
+							existingTC.SetCancelled()
+						}
+						m.listCmp.UpdateItem(existingCall.ID, existingTC)
+						return nil
+					}
+				}
+			}
+		}
+	}
+
+	// Add new tool call if not found.
 	return m.listCmp.AppendItem(messages.NewToolCallCmp(msg.ID, tc, m.app.Permissions))
 }
 
