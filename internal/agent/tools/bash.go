@@ -328,7 +328,7 @@ func NewBashTool(permissions permission.Service, workingDir string, attribution 
 
 						if currentOutputLen == prevOutputLen {
 							noOutputDuration += timeSinceLastCheck
-							if noOutputDuration > 10*time.Second {
+							if noOutputDuration > 20*time.Second {
 								// Likely hanging on SSH auth.
 								bgManager.Kill(bgShell.ID)
 								return fantasy.ToolResponse{}, fmt.Errorf("git command appears to be hanging (likely SSH authentication issue). Please run manually in your terminal with SSH agent configured")
